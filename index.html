@@ -45,7 +45,7 @@
             overflow-y: scroll;
             padding: 1rem;
             border-radius: 0.5rem;
-            margin-top: 2rem;
+            margin-top: 1rem;
         }
         .log-entry {
             margin-bottom: 0.5rem;
@@ -133,7 +133,7 @@
     </div>
 
     <!-- PENTING: Muat Google Maps JavaScript API -->
-    <!-- Ganti 'MASUKKAN_API_KEY_ANDA' dengan Google Maps API Key Anda -->
+    <!-- Ganti 'MASUKKAN_API_KEY_ANDA' dengan Google Maps API Key Anda yang sebenarnya! -->
     <script src="https://maps.googleapis.com/maps/api/js?key=MASUKKAN_API_KEY_ANDA&libraries=places&callback=initApp" async defer></script>
 
     <script>
@@ -144,7 +144,6 @@
 
         // --- ELEMEN DOM ---
         const logConsole = document.getElementById('log-console');
-        // ... (elemen DOM lainnya tetap sama)
         const getLocationBtn = document.getElementById('getLocationBtn');
         const locationPromptDiv = document.getElementById('location-prompt');
         const placeTypeSelectorDiv = document.getElementById('place-type-selector');
@@ -162,22 +161,23 @@
 
         /**
          * Fungsi untuk menambahkan pesan ke konsol log di UI.
-         * @param {string} message - Pesan yang akan ditampilkan.
-         * @param {string} type - Tipe log ('info', 'success', 'error').
          */
         function addLog(message, type = 'info') {
             const logEntry = document.createElement('div');
             logEntry.className = `log-entry ${type}`;
             logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
             logConsole.appendChild(logEntry);
-            // Auto-scroll ke bawah
             logConsole.scrollTop = logConsole.scrollHeight;
         }
+        
+        // Menambahkan log paling awal untuk memastikan JavaScript berjalan
+        addLog("Memulai script frontend...");
 
         /**
          * Fungsi ini dipanggil setelah script Google Maps selesai dimuat.
          */
         function initApp() {
+            addLog("Google Maps API berhasil dimuat dan memanggil initApp().", 'success');
             addLog("Aplikasi siap. Menunggu aksi pengguna...");
             getLocationBtn.addEventListener('click', getUserLocation);
             
@@ -212,7 +212,6 @@
 
         /**
          * Mencari tempat terdekat menggunakan Places API.
-         * @param {string} type - Tipe tempat (cafe, restaurant, hotel).
          */
         function findNearbyPlaces(type) {
             if (!userLocation) {
@@ -226,12 +225,12 @@
             placesList.innerHTML = '';
             addLog(`Memulai pencarian tempat terdekat dengan tipe: '${type}'...`);
 
-            const map = new google.maps.Map(document.createElement('div')); // Dummy map
+            const map = new google.maps.Map(document.createElement('div'));
             placesService = new google.maps.places.PlacesService(map);
 
             const request = {
                 location: userLocation,
-                radius: '2000', // Radius 2 km
+                radius: '2000',
                 type: [type]
             };
 
@@ -251,7 +250,6 @@
 
         /**
          * Menampilkan daftar tempat terdekat ke UI.
-         * @param {Array} places - Array objek tempat dari Google.
          */
         function renderNearbyPlaces(places) {
             places.forEach(place => {
@@ -277,13 +275,11 @@
 
         /**
          * Mengirim Place ID ke backend untuk dianalisis.
-         * @param {string} placeId - ID unik dari Google Maps.
-         * @param {string} placeName - Nama tempat untuk logging.
          */
         async function handleAnalysis(placeId, placeName) {
             addLog(`Memulai analisis untuk '${placeName}' (ID: ${placeId})...`);
             resetUI();
-            nearbyPlacesDiv.classList.add('hidden'); // Sembunyikan daftar tempat
+            nearbyPlacesDiv.classList.add('hidden');
             resultsDiv.classList.remove('hidden');
             analysisLoader.classList.remove('hidden');
 
@@ -314,7 +310,7 @@
             }
         }
         
-        // Fungsi renderResults, showError, dan resetUI tetap sama seperti sebelumnya
+        // Fungsi renderResults, showError, dan resetUI tetap sama
         function renderResults(data) {
             addLog('Menampilkan hasil analisis ke UI.', 'info');
             overallSentimentEl.textContent = data.sentimen_keseluruhan || 'Tidak tersedia';
@@ -344,7 +340,7 @@
                         aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-200 rounded-full';
                     }
                     li.appendChild(aspectName);
-                    li.appendChild(aspectSentiment);
+li.appendChild(aspectSentiment);
                     aspectsList.appendChild(li);
                 });
             } else {
@@ -364,7 +360,6 @@
             errorDiv.classList.add('hidden');
             resultsContent.classList.add('hidden');
         }
-
     </script>
 </body>
 </html>
