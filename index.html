@@ -36,6 +36,23 @@
         .place-item:hover {
             background-color: #f0f4f8;
         }
+        /* Style untuk konsol log */
+        #log-console {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #2d3748; /* bg-gray-800 */
+            color: #e2e8f0; /* text-gray-300 */
+            height: 200px;
+            overflow-y: scroll;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 2rem;
+        }
+        .log-entry {
+            margin-bottom: 0.5rem;
+        }
+        .log-entry.info { color: #63b3ed; } /* text-blue-400 */
+        .log-entry.success { color: #68d391; } /* text-green-400 */
+        .log-entry.error { color: #fc8181; } /* text-red-400 */
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -76,9 +93,7 @@
                 <div class="loader"></div>
                 <p class="ml-4 text-gray-600">Mencari tempat terdekat...</p>
             </div>
-            <ul id="places-list" class="bg-white rounded-xl shadow-md divide-y">
-                <!-- Daftar tempat akan diisi oleh JavaScript -->
-            </ul>
+            <ul id="places-list" class="bg-white rounded-xl shadow-md divide-y"></ul>
         </div>
 
         <!-- Area Hasil Analisis -->
@@ -109,6 +124,12 @@
             </div>
         </div>
 
+        <!-- Konsol Log untuk Debugging -->
+        <div id="log-console-container" class="mt-8">
+            <h3 class="text-lg font-semibold">Log Proses:</h3>
+            <div id="log-console"></div>
+        </div>
+
     </div>
 
     <!-- PENTING: Muat Google Maps JavaScript API -->
@@ -122,28 +143,42 @@
         let placesService;
 
         // --- ELEMEN DOM ---
+        const logConsole = document.getElementById('log-console');
+        // ... (elemen DOM lainnya tetap sama)
         const getLocationBtn = document.getElementById('getLocationBtn');
         const locationPromptDiv = document.getElementById('location-prompt');
         const placeTypeSelectorDiv = document.getElementById('place-type-selector');
         const nearbyPlacesDiv = document.getElementById('nearby-places');
         const placesLoader = document.getElementById('places-loader');
         const placesList = document.getElementById('places-list');
-        
         const resultsDiv = document.getElementById('results');
         const analysisLoader = document.getElementById('analysis-loader');
         const errorDiv = document.getElementById('error');
         const errorMessage = document.getElementById('errorMessage');
         const resultsContent = document.getElementById('resultsContent');
-        
         const overallSentimentEl = document.getElementById('overallSentiment');
         const summaryEl = document.getElementById('summary');
         const aspectsList = document.getElementById('aspects');
 
         /**
+         * Fungsi untuk menambahkan pesan ke konsol log di UI.
+         * @param {string} message - Pesan yang akan ditampilkan.
+         * @param {string} type - Tipe log ('info', 'success', 'error').
+         */
+        function addLog(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logConsole.appendChild(logEntry);
+            // Auto-scroll ke bawah
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        /**
          * Fungsi ini dipanggil setelah script Google Maps selesai dimuat.
          */
         function initApp() {
-            console.log("Aplikasi siap.");
+            addLog("Aplikasi siap. Menunggu aksi pengguna...");
             getLocationBtn.addEventListener('click', getUserLocation);
             
             document.querySelectorAll('.place-type-btn').forEach(button => {
@@ -155,18 +190,22 @@
          * Meminta lokasi GPS pengguna.
          */
         function getUserLocation() {
+            addLog("Mencoba mendapatkan lokasi GPS...");
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(position => {
                     userLocation = {
                         lat: position.coords.latitude,
                         lng: position.coords.longitude
                     };
+                    addLog(`Lokasi GPS berhasil didapat: Lat: ${userLocation.lat}, Lng: ${userLocation.lng}`, 'success');
                     locationPromptDiv.classList.add('hidden');
                     placeTypeSelectorDiv.classList.remove('hidden');
                 }, () => {
+                    addLog('Gagal mendapatkan lokasi. Izin ditolak oleh pengguna.', 'error');
                     alert('Gagal mendapatkan lokasi. Pastikan Anda telah memberikan izin.');
                 });
             } else {
+                addLog('Browser tidak mendukung Geolocation.', 'error');
                 alert('Browser Anda tidak mendukung Geolocation.');
             }
         }
@@ -176,12 +215,16 @@
          * @param {string} type - Tipe tempat (cafe, restaurant, hotel).
          */
         function findNearbyPlaces(type) {
-            if (!userLocation) return;
+            if (!userLocation) {
+                addLog('Lokasi pengguna tidak ditemukan untuk memulai pencarian.', 'error');
+                return;
+            }
             
             resetUI();
             nearbyPlacesDiv.classList.remove('hidden');
             placesLoader.classList.remove('hidden');
             placesList.innerHTML = '';
+            addLog(`Memulai pencarian tempat terdekat dengan tipe: '${type}'...`);
 
             const map = new google.maps.Map(document.createElement('div')); // Dummy map
             placesService = new google.maps.places.PlacesService(map);
@@ -194,10 +237,14 @@
 
             placesService.nearbySearch(request, (results, status) => {
                 placesLoader.classList.add('hidden');
+                addLog(`Pencarian selesai. Status dari Google: ${status}`, 'info');
+                
                 if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                    addLog(`Ditemukan ${results.length} tempat. Menampilkan daftar...`, 'success');
                     renderNearbyPlaces(results);
                 } else {
-                    placesList.innerHTML = '<li class="p-4 text-center text-gray-500">Tidak ada tempat yang ditemukan.</li>';
+                    addLog(`Pencarian gagal atau tidak ada hasil. Status: ${status}`, 'error');
+                    placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Pencarian gagal. Status: ${status}</li>`;
                 }
             });
         }
@@ -223,7 +270,7 @@
                 li.appendChild(placeName);
                 li.appendChild(placeVicinity);
                 
-                li.addEventListener('click', () => handleAnalysis(place.place_id));
+                li.addEventListener('click', () => handleAnalysis(place.place_id, place.name));
                 placesList.appendChild(li);
             });
         }
@@ -231,8 +278,10 @@
         /**
          * Mengirim Place ID ke backend untuk dianalisis.
          * @param {string} placeId - ID unik dari Google Maps.
+         * @param {string} placeName - Nama tempat untuk logging.
          */
-        async function handleAnalysis(placeId) {
+        async function handleAnalysis(placeId, placeName) {
+            addLog(`Memulai analisis untuk '${placeName}' (ID: ${placeId})...`);
             resetUI();
             nearbyPlacesDiv.classList.add('hidden'); // Sembunyikan daftar tempat
             resultsDiv.classList.remove('hidden');
@@ -244,6 +293,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ placeId: placeId }),
                 });
+                
+                addLog(`Menerima respons dari backend dengan status: ${response.status}`, response.ok ? 'info' : 'error');
 
                 if (!response.ok) {
                     const errorData = await response.json();
@@ -251,10 +302,12 @@
                 }
 
                 const rawData = await response.json();
+                addLog('Berhasil mem-parsing respons JSON dari backend.', 'success');
                 const data = JSON.parse(rawData);
                 renderResults(data);
 
             } catch (err) {
+                addLog(`Terjadi error saat analisis: ${err.message}`, 'error');
                 showError(err.message);
             } finally {
                 analysisLoader.classList.add('hidden');
@@ -263,6 +316,7 @@
         
         // Fungsi renderResults, showError, dan resetUI tetap sama seperti sebelumnya
         function renderResults(data) {
+            addLog('Menampilkan hasil analisis ke UI.', 'info');
             overallSentimentEl.textContent = data.sentimen_keseluruhan || 'Tidak tersedia';
             if (data.sentimen_keseluruhan === 'Positif') {
                 overallSentimentEl.className = 'text-lg font-medium p-3 rounded-lg bg-green-100 text-green-800';
