@@ -134,14 +134,13 @@
 
     <!-- PENTING: Muat Google Maps JavaScript API -->
     <!-- Ganti 'MASUKKAN_API_KEY_ANDA' dengan Google Maps API Key Anda yang sebenarnya! -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places&callback=initApp" async defer></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=MASUKKAN_API_KEY_ANDA&libraries=places&callback=initApp" async defer></script>
 
     <script>
         // --- KONFIGURASI ---
         const BACKEND_URL = 'https://review-pintar-backend-523600897133.asia-southeast1.run.app/api/analyze'; 
         let userLocation = null;
-        let placesService;
-
+        
         // --- ELEMEN DOM ---
         const logConsole = document.getElementById('log-console');
         const getLocationBtn = document.getElementById('getLocationBtn');
@@ -170,11 +169,11 @@
             logConsole.scrollTop = logConsole.scrollHeight;
         }
         
-        // Menambahkan log paling awal untuk memastikan JavaScript berjalan
         addLog("Memulai script frontend...");
 
-        // === PERBAIKAN UTAMA: Membuat initApp sebagai fungsi global ===
-        // Dengan cara ini, Google Maps API pasti bisa menemukannya.
+        /**
+         * Fungsi ini dipanggil setelah script Google Maps selesai dimuat.
+         */
         window.initApp = function() {
             addLog("Google Maps API berhasil dimuat dan memanggil initApp().", 'success');
             addLog("Aplikasi siap. Menunggu aksi pengguna...");
@@ -210,9 +209,10 @@
         }
 
         /**
-         * Mencari tempat terdekat menggunakan Places API.
+         * Mencari tempat terdekat menggunakan Places API yang baru.
+         * @param {string} type - Tipe tempat (cafe, restaurant, hotel).
          */
-        function findNearbyPlaces(type) {
+        async function findNearbyPlaces(type) {
             if (!userLocation) {
                 addLog('Lokasi pengguna tidak ditemukan untuk memulai pencarian.', 'error');
                 return;
@@ -224,27 +224,32 @@
             placesList.innerHTML = '';
             addLog(`Memulai pencarian tempat terdekat dengan tipe: '${type}'...`);
 
-            const map = new google.maps.Map(document.createElement('div'));
-            placesService = new google.maps.places.PlacesService(map);
-
+            // === PERBAIKAN: Menggunakan API google.maps.places.Place yang baru ===
             const request = {
-                location: userLocation,
-                radius: '2000',
-                type: [type]
+                includedTypes: [type],
+                location: new google.maps.LatLng(userLocation.lat, userLocation.lng),
+                radius: 2000, // Radius 2 km
             };
 
-            placesService.nearbySearch(request, (results, status) => {
-                placesLoader.classList.add('hidden');
-                addLog(`Pencarian selesai. Status dari Google: ${status}`, 'info');
+            try {
+                // Menggunakan Place.searchNearby yang modern
+                const { places } = await google.maps.places.Place.searchNearby(request);
                 
-                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-                    addLog(`Ditemukan ${results.length} tempat. Menampilkan daftar...`, 'success');
-                    renderNearbyPlaces(results);
+                placesLoader.classList.add('hidden');
+                addLog(`Pencarian selesai.`, 'info');
+
+                if (places && places.length) {
+                    addLog(`Ditemukan ${places.length} tempat. Menampilkan daftar...`, 'success');
+                    renderNearbyPlaces(places);
                 } else {
-                    addLog(`Pencarian gagal atau tidak ada hasil. Status: ${status}`, 'error');
-                    placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Pencarian gagal. Status: ${status}</li>`;
+                    addLog(`Tidak ada tempat yang ditemukan.`, 'info');
+                    placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Tidak ada tempat yang ditemukan.</li>`;
                 }
-            });
+            } catch (error) {
+                placesLoader.classList.add('hidden');
+                addLog(`Pencarian gagal: ${error.message}`, 'error');
+                placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Pencarian gagal. Periksa konsol untuk detail.</li>`;
+            }
         }
 
         /**
@@ -254,20 +259,23 @@
             places.forEach(place => {
                 const li = document.createElement('li');
                 li.className = 'place-item p-4';
-                li.dataset.placeId = place.place_id;
+                // === PERBAIKAN: Menggunakan place.id dari API baru ===
+                li.dataset.placeId = place.id;
 
                 const placeName = document.createElement('h3');
                 placeName.className = 'font-semibold text-lg';
-                placeName.textContent = place.name;
+                // === PERBAIKAN: Menggunakan place.displayName dari API baru ===
+                placeName.textContent = place.displayName;
 
                 const placeVicinity = document.createElement('p');
                 placeVicinity.className = 'text-gray-600 text-sm';
-                placeVicinity.textContent = place.vicinity;
+                // === PERBAIKAN: Menggunakan place.formattedAddress dari API baru ===
+                placeVicinity.textContent = place.formattedAddress;
 
                 li.appendChild(placeName);
                 li.appendChild(placeVicinity);
                 
-                li.addEventListener('click', () => handleAnalysis(place.place_id, place.name));
+                li.addEventListener('click', () => handleAnalysis(place.id, place.displayName));
                 placesList.appendChild(li);
             });
         }
