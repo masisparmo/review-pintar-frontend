@@ -227,10 +227,8 @@
             placesList.innerHTML = '';
             addLog(`Memulai pencarian tempat terdekat dengan tipe: '${type}'...`);
 
-            // === PERBAIKAN UTAMA: Menambahkan properti 'fields' yang wajib ada ===
+            // === PERBAIKAN UTAMA: Menghapus properti 'fields' yang tidak diperlukan ===
             const request = {
-                // Kita harus memberitahu API data apa saja yang kita butuhkan
-                fields: ['id', 'displayName', 'formattedAddress'],
                 includedTypes: [type],
                 locationRestriction: {
                     center: {
