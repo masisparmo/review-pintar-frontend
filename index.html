@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reviewer Pintar - Analis Ulasan AI</title>
+    <!-- Memuat Tailwind CSS untuk styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Memuat Font Inter dari Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Menggunakan font Inter sebagai default */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style untuk spinner/loader */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Style untuk item daftar yang bisa diklik */
+        .place-item {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .place-item:hover {
+            background-color: #f0f4f8;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-2xl">
+        
+        <!-- Header Aplikasi -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-blue-600">Reviewer Pintar</h1>
+            <p class="text-lg text-gray-600 mt-2">Pilih tempat di dekat Anda untuk dianalisis oleh AI</p>
+        </header>
+
+        <!-- Kontrol Utama -->
+        <main class="bg-white p-6 rounded-xl shadow-md">
+            <!-- Pesan untuk mengaktifkan lokasi -->
+            <div id="location-prompt" class="text-center">
+                <p class="font-semibold text-lg mb-4">Untuk memulai, izinkan kami mengakses lokasi Anda.</p>
+                <button id="getLocationBtn" class="bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors duration-300 shadow-sm">
+                    Temukan Tempat Terdekat
+                </button>
+            </div>
+
+            <!-- Pilihan Tipe Tempat (muncul setelah lokasi didapat) -->
+            <div id="place-type-selector" class="hidden">
+                <p class="font-semibold text-lg mb-4 text-center">Saya sedang mencari...</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button data-type="cafe" class="place-type-btn w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-blue-200 transition-colors">Kafe ☕</button>
+                    <button data-type="restaurant" class="place-type-btn w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-blue-200 transition-colors">Restoran 🍽️</button>
+                    <button data-type="hotel" class="place-type-btn w-full bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg hover:bg-blue-200 transition-colors">Hotel 🏨</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Daftar Tempat Terdekat -->
+        <div id="nearby-places" class="mt-8 hidden">
+            <h2 class="text-2xl font-bold mb-4">Pilih Tempat untuk Dianalisis:</h2>
+            <div id="places-loader" class="flex justify-center items-center py-8">
+                <div class="loader"></div>
+                <p class="ml-4 text-gray-600">Mencari tempat terdekat...</p>
+            </div>
+            <ul id="places-list" class="bg-white rounded-xl shadow-md divide-y">
+                <!-- Daftar tempat akan diisi oleh JavaScript -->
+            </ul>
+        </div>
+
+        <!-- Area Hasil Analisis -->
+        <div id="results" class="mt-8 hidden">
+            <!-- Konten hasil tetap sama seperti sebelumnya -->
+            <div id="analysis-loader" class="flex justify-center items-center py-8">
+                <div class="loader"></div>
+                <p class="ml-4 text-gray-600">Menganalisis ulasan...</p>
+            </div>
+            <div id="error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-center">
+                <strong class="font-bold">Oops!</strong>
+                <span class="block sm:inline" id="errorMessage">Terjadi kesalahan.</span>
+            </div>
+            <div id="resultsContent" class="hidden bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-2xl font-bold mb-4 border-b pb-2">Hasil Analisis AI</h2>
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-2">Sentimen Keseluruhan</h3>
+                    <p id="overallSentiment" class="text-lg font-medium p-3 rounded-lg"></p>
+                </div>
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-2">Ringkasan AI</h3>
+                    <p id="summary" class="text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-lg"></p>
+                </div>
+                <div>
+                    <h3 class="text-xl font-semibold mb-2">Aspek Utama yang Dibicarakan</h3>
+                    <ul id="aspects" class="space-y-2"></ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- PENTING: Muat Google Maps JavaScript API -->
+    <!-- Ganti 'MASUKKAN_API_KEY_ANDA' dengan Google Maps API Key Anda -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=MASUKKAN_API_KEY_ANDA&libraries=places&callback=initApp" async defer></script>
+
+    <script>
+        // --- KONFIGURASI ---
+        const BACKEND_URL = 'https://review-pintar-backend-523600897133.asia-southeast1.run.app/api/analyze'; 
+        let userLocation = null;
+        let placesService;
+
+        // --- ELEMEN DOM ---
+        const getLocationBtn = document.getElementById('getLocationBtn');
+        const locationPromptDiv = document.getElementById('location-prompt');
+        const placeTypeSelectorDiv = document.getElementById('place-type-selector');
+        const nearbyPlacesDiv = document.getElementById('nearby-places');
+        const placesLoader = document.getElementById('places-loader');
+        const placesList = document.getElementById('places-list');
+        
+        const resultsDiv = document.getElementById('results');
+        const analysisLoader = document.getElementById('analysis-loader');
+        const errorDiv = document.getElementById('error');
+        const errorMessage = document.getElementById('errorMessage');
+        const resultsContent = document.getElementById('resultsContent');
+        
+        const overallSentimentEl = document.getElementById('overallSentiment');
+        const summaryEl = document.getElementById('summary');
+        const aspectsList = document.getElementById('aspects');
+
+        /**
+         * Fungsi ini dipanggil setelah script Google Maps selesai dimuat.
+         */
+        function initApp() {
+            console.log("Aplikasi siap.");
+            getLocationBtn.addEventListener('click', getUserLocation);
+            
+            document.querySelectorAll('.place-type-btn').forEach(button => {
+                button.addEventListener('click', () => findNearbyPlaces(button.dataset.type));
+            });
+        }
+
+        /**
+         * Meminta lokasi GPS pengguna.
+         */
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    userLocation = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    locationPromptDiv.classList.add('hidden');
+                    placeTypeSelectorDiv.classList.remove('hidden');
+                }, () => {
+                    alert('Gagal mendapatkan lokasi. Pastikan Anda telah memberikan izin.');
+                });
+            } else {
+                alert('Browser Anda tidak mendukung Geolocation.');
+            }
+        }
+
+        /**
+         * Mencari tempat terdekat menggunakan Places API.
+         * @param {string} type - Tipe tempat (cafe, restaurant, hotel).
+         */
+        function findNearbyPlaces(type) {
+            if (!userLocation) return;
+            
+            resetUI();
+            nearbyPlacesDiv.classList.remove('hidden');
+            placesLoader.classList.remove('hidden');
+            placesList.innerHTML = '';
+
+            const map = new google.maps.Map(document.createElement('div')); // Dummy map
+            placesService = new google.maps.places.PlacesService(map);
+
+            const request = {
+                location: userLocation,
+                radius: '2000', // Radius 2 km
+                type: [type]
+            };
+
+            placesService.nearbySearch(request, (results, status) => {
+                placesLoader.classList.add('hidden');
+                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                    renderNearbyPlaces(results);
+                } else {
+                    placesList.innerHTML = '<li class="p-4 text-center text-gray-500">Tidak ada tempat yang ditemukan.</li>';
+                }
+            });
+        }
+
+        /**
+         * Menampilkan daftar tempat terdekat ke UI.
+         * @param {Array} places - Array objek tempat dari Google.
+         */
+        function renderNearbyPlaces(places) {
+            places.forEach(place => {
+                const li = document.createElement('li');
+                li.className = 'place-item p-4';
+                li.dataset.placeId = place.place_id;
+
+                const placeName = document.createElement('h3');
+                placeName.className = 'font-semibold text-lg';
+                placeName.textContent = place.name;
+
+                const placeVicinity = document.createElement('p');
+                placeVicinity.className = 'text-gray-600 text-sm';
+                placeVicinity.textContent = place.vicinity;
+
+                li.appendChild(placeName);
+                li.appendChild(placeVicinity);
+                
+                li.addEventListener('click', () => handleAnalysis(place.place_id));
+                placesList.appendChild(li);
+            });
+        }
+
+        /**
+         * Mengirim Place ID ke backend untuk dianalisis.
+         * @param {string} placeId - ID unik dari Google Maps.
+         */
+        async function handleAnalysis(placeId) {
+            resetUI();
+            nearbyPlacesDiv.classList.add('hidden'); // Sembunyikan daftar tempat
+            resultsDiv.classList.remove('hidden');
+            analysisLoader.classList.remove('hidden');
+
+            try {
+                const response = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ placeId: placeId }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const rawData = await response.json();
+                const data = JSON.parse(rawData);
+                renderResults(data);
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                analysisLoader.classList.add('hidden');
+            }
+        }
+        
+        // Fungsi renderResults, showError, dan resetUI tetap sama seperti sebelumnya
+        function renderResults(data) {
+            overallSentimentEl.textContent = data.sentimen_keseluruhan || 'Tidak tersedia';
+            if (data.sentimen_keseluruhan === 'Positif') {
+                overallSentimentEl.className = 'text-lg font-medium p-3 rounded-lg bg-green-100 text-green-800';
+            } else if (data.sentimen_keseluruhan === 'Negatif') {
+                overallSentimentEl.className = 'text-lg font-medium p-3 rounded-lg bg-red-100 text-red-800';
+            } else {
+                overallSentimentEl.className = 'text-lg font-medium p-3 rounded-lg bg-yellow-100 text-yellow-800';
+            }
+            summaryEl.textContent = data.ringkasan || 'Tidak ada ringkasan.';
+            aspectsList.innerHTML = '';
+            if (data.aspek_utama && Array.isArray(data.aspek_utama)) {
+                data.aspek_utama.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'p-3 bg-gray-50 rounded-lg flex justify-between items-center';
+                    const aspectName = document.createElement('span');
+                    aspectName.className = 'font-medium';
+                    aspectName.textContent = item.aspek;
+                    const aspectSentiment = document.createElement('span');
+                    aspectSentiment.textContent = item.sentimen;
+                    if (item.sentimen === 'Positif') {
+                        aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-green-800 bg-green-200 rounded-full';
+                    } else if (item.sentimen === 'Negatif') {
+                        aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-red-800 bg-red-200 rounded-full';
+                    } else {
+                        aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-200 rounded-full';
+                    }
+                    li.appendChild(aspectName);
+                    li.appendChild(aspectSentiment);
+                    aspectsList.appendChild(li);
+                });
+            } else {
+                aspectsList.innerHTML = '<li>Tidak ada analisis aspek yang ditemukan.</li>';
+            }
+            resultsContent.classList.remove('hidden');
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function resetUI() {
+            resultsDiv.classList.add('hidden');
+            analysisLoader.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+            resultsContent.classList.add('hidden');
+        }
+
+    </script>
+</body>
+</html>
