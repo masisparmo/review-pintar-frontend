@@ -98,7 +98,6 @@
 
         <!-- Area Hasil Analisis -->
         <div id="results" class="mt-8 hidden">
-            <!-- Konten hasil tetap sama seperti sebelumnya -->
             <div id="analysis-loader" class="flex justify-center items-center py-8">
                 <div class="loader"></div>
                 <p class="ml-4 text-gray-600">Menganalisis ulasan...</p>
@@ -132,36 +131,23 @@
 
     </div>
 
-    <!-- PENTING: Muat Google Maps JavaScript API -->
-    <!-- Ganti 'MASUKKAN_API_KEY_ANDA' dengan Google Maps API Key Anda yang sebenarnya! -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=MASUKKAN_API_KEY_ANDA&libraries=places&callback=initApp" async defer></script>
-
+    <!-- === PERBAIKAN: Script utama dipindahkan SEBELUM memuat Google Maps === -->
     <script>
         // --- KONFIGURASI ---
         const BACKEND_URL = 'https://review-pintar-backend-523600897133.asia-southeast1.run.app/api/analyze'; 
         let userLocation = null;
         
         // --- ELEMEN DOM ---
-        const logConsole = document.getElementById('log-console');
-        const getLocationBtn = document.getElementById('getLocationBtn');
-        const locationPromptDiv = document.getElementById('location-prompt');
-        const placeTypeSelectorDiv = document.getElementById('place-type-selector');
-        const nearbyPlacesDiv = document.getElementById('nearby-places');
-        const placesLoader = document.getElementById('places-loader');
-        const placesList = document.getElementById('places-list');
-        const resultsDiv = document.getElementById('results');
-        const analysisLoader = document.getElementById('analysis-loader');
-        const errorDiv = document.getElementById('error');
-        const errorMessage = document.getElementById('errorMessage');
-        const resultsContent = document.getElementById('resultsContent');
-        const overallSentimentEl = document.getElementById('overallSentiment');
-        const summaryEl = document.getElementById('summary');
-        const aspectsList = document.getElementById('aspects');
+        // Variabel ini akan diisi setelah DOM dimuat
+        let logConsole, getLocationBtn, locationPromptDiv, placeTypeSelectorDiv, nearbyPlacesDiv, placesLoader, placesList, resultsDiv, analysisLoader, errorDiv, errorMessage, resultsContent, overallSentimentEl, summaryEl, aspectsList;
 
         /**
          * Fungsi untuk menambahkan pesan ke konsol log di UI.
          */
         function addLog(message, type = 'info') {
+            if (!logConsole) { // Pastikan log console sudah ada
+                logConsole = document.getElementById('log-console');
+            }
             const logEntry = document.createElement('div');
             logEntry.className = `log-entry ${type}`;
             logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -172,10 +158,28 @@
         addLog("Memulai script frontend...");
 
         /**
-         * Fungsi ini dipanggil setelah script Google Maps selesai dimuat.
+         * Fungsi ini dipanggil oleh Google Maps setelah script-nya siap.
          */
         window.initApp = function() {
             addLog("Google Maps API berhasil dimuat dan memanggil initApp().", 'success');
+
+            // Mengambil elemen DOM setelah halaman pasti sudah dimuat
+            logConsole = document.getElementById('log-console');
+            getLocationBtn = document.getElementById('getLocationBtn');
+            locationPromptDiv = document.getElementById('location-prompt');
+            placeTypeSelectorDiv = document.getElementById('place-type-selector');
+            nearbyPlacesDiv = document.getElementById('nearby-places');
+            placesLoader = document.getElementById('places-loader');
+            placesList = document.getElementById('places-list');
+            resultsDiv = document.getElementById('results');
+            analysisLoader = document.getElementById('analysis-loader');
+            errorDiv = document.getElementById('error');
+            errorMessage = document.getElementById('errorMessage');
+            resultsContent = document.getElementById('resultsContent');
+            overallSentimentEl = document.getElementById('overallSentiment');
+            summaryEl = document.getElementById('summary');
+            aspectsList = document.getElementById('aspects');
+            
             addLog("Aplikasi siap. Menunggu aksi pengguna...");
             getLocationBtn.addEventListener('click', getUserLocation);
             
@@ -210,7 +214,6 @@
 
         /**
          * Mencari tempat terdekat menggunakan Places API yang baru.
-         * @param {string} type - Tipe tempat (cafe, restaurant, hotel).
          */
         async function findNearbyPlaces(type) {
             if (!userLocation) {
@@ -224,7 +227,6 @@
             placesList.innerHTML = '';
             addLog(`Memulai pencarian tempat terdekat dengan tipe: '${type}'...`);
 
-            // === PERBAIKAN: Menggunakan API google.maps.places.Place yang baru ===
             const request = {
                 includedTypes: [type],
                 location: new google.maps.LatLng(userLocation.lat, userLocation.lng),
@@ -232,7 +234,6 @@
             };
 
             try {
-                // Menggunakan Place.searchNearby yang modern
                 const { places } = await google.maps.places.Place.searchNearby(request);
                 
                 placesLoader.classList.add('hidden');
@@ -259,17 +260,14 @@
             places.forEach(place => {
                 const li = document.createElement('li');
                 li.className = 'place-item p-4';
-                // === PERBAIKAN: Menggunakan place.id dari API baru ===
                 li.dataset.placeId = place.id;
 
                 const placeName = document.createElement('h3');
                 placeName.className = 'font-semibold text-lg';
-                // === PERBAIKAN: Menggunakan place.displayName dari API baru ===
                 placeName.textContent = place.displayName;
 
                 const placeVicinity = document.createElement('p');
                 placeVicinity.className = 'text-gray-600 text-sm';
-                // === PERBAIKAN: Menggunakan place.formattedAddress dari API baru ===
                 placeVicinity.textContent = place.formattedAddress;
 
                 li.appendChild(placeName);
@@ -317,7 +315,6 @@
             }
         }
         
-        // Fungsi renderResults, showError, dan resetUI tetap sama
         function renderResults(data) {
             addLog('Menampilkan hasil analisis ke UI.', 'info');
             overallSentimentEl.textContent = data.sentimen_keseluruhan || 'Tidak tersedia';
@@ -368,5 +365,10 @@
             resultsContent.classList.add('hidden');
         }
     </script>
+
+    <!-- PENTING: Muat Google Maps JavaScript API SETELAH script kita didefinisikan -->
+    <!-- Ganti 'MASUKKAN_API_KEY_ANDA' dengan Google Maps API Key Anda yang sebenarnya! -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places&callback=initApp" async defer></script>
+
 </body>
 </html>
