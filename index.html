@@ -151,7 +151,7 @@
         let userLocation = null;
         let map;
         let markers = [];
-        let Place, Geometry, AdvancedMarkerElement; // Variabel untuk menyimpan library yang diimpor
+        let placesService; // Variabel untuk menyimpan service Places
         
         // --- ELEMEN DOM ---
         let logConsole, getLocationBtn, locationPromptDiv, placeTypeSelectorDiv, mapAndListContainer, nearbyPlacesDiv, placesLoader, placesList, resultsDiv, analysisLoader, errorDiv, errorMessage, resultsContent, overallSentimentEl, summaryEl, aspectsList;
@@ -173,7 +173,7 @@
         /**
          * Fungsi ini dipanggil oleh Google Maps setelah script-nya siap.
          */
-        async function initApp() {
+        function initApp() {
             addLog("Memulai script frontend...");
 
             // Mengambil elemen DOM
@@ -193,23 +193,6 @@
             overallSentimentEl = document.getElementById('overallSentiment');
             summaryEl = document.getElementById('summary');
             aspectsList = document.getElementById('aspects');
-
-            try {
-                // === PERBAIKAN UTAMA: Mengimpor semua library yang dibutuhkan ===
-                const { Place } = await google.maps.importLibrary("places");
-                const { spherical } = await google.maps.importLibrary("geometry");
-                const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
-                
-                // Menyimpan referensi global
-                window.Place = Place;
-                window.Geometry = spherical;
-                window.AdvancedMarkerElement = AdvancedMarkerElement;
-
-                addLog("Library 'Places', 'Geometry', dan 'Marker' berhasil dimuat.", 'success');
-            } catch (error) {
-                addLog(`Gagal memuat library Google Maps: ${error.message}`, 'error');
-                return; // Hentikan eksekusi jika library gagal dimuat
-            }
             
             addLog("Aplikasi siap. Menunggu aksi pengguna...");
             getLocationBtn.addEventListener('click', getUserLocation);
@@ -250,29 +233,27 @@
             map = new google.maps.Map(document.getElementById("map"), {
                 center: userLocation,
                 zoom: 15,
-                mapId: 'REVIEWER_PINTAR_MAP' // ID Peta diperlukan untuk Advanced Markers
             });
-
             // Menambahkan marker untuk lokasi pengguna
-            const userMarker = new window.AdvancedMarkerElement({
+            new google.maps.Marker({
                 position: userLocation,
                 map: map,
                 title: "Lokasi Anda",
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: "#4285F4",
+                    fillOpacity: 1,
+                    strokeWeight: 2,
+                    strokeColor: "white",
+                },
             });
-            // Customisasi marker pengguna dengan CSS
-            const userIcon = document.createElement('div');
-            userIcon.style.width = '20px';
-            userIcon.style.height = '20px';
-            userIcon.style.backgroundColor = '#4285F4';
-            userIcon.style.border = '2px solid white';
-            userIcon.style.borderRadius = '50%';
-            userMarker.content = userIcon;
         }
 
         /**
-         * Mencari tempat terdekat menggunakan Places API yang baru.
+         * Mencari tempat terdekat menggunakan Places API yang stabil.
          */
-        async function findNearbyPlaces(type) {
+        function findNearbyPlaces(type) {
             if (!userLocation) {
                 addLog('Lokasi pengguna tidak ditemukan untuk memulai pencarian.', 'error');
                 return;
@@ -286,87 +267,69 @@
             
             initMap(); // Inisialisasi peta di sini
 
+            // === PERBAIKAN UTAMA: Menggunakan google.maps.places.PlacesService ===
+            placesService = new google.maps.places.PlacesService(map);
+
             const request = {
-                fields: ['id', 'displayName', 'formattedAddress', 'location'],
-                includedTypes: [type],
-                locationRestriction: {
-                    center: {
-                        lat: userLocation.lat,
-                        lng: userLocation.lng,
-                    },
-                    radius: 1000, // Radius 1 km
-                },
+                location: new google.maps.LatLng(userLocation.lat, userLocation.lng),
+                radius: '1000', // Radius 1 km
+                type: [type]
             };
 
-            try {
-                const { places } = await window.Place.searchNearby(request);
+            placesService.nearbySearch(request, (results, status) => {
+                placesLoader.classList.add('hidden');
+                addLog(`Pencarian selesai. Status dari Google: ${status}`, 'info');
                 
-                placesLoader.classList.add('hidden');
-                addLog(`Pencarian selesai.`, 'info');
-
-                if (places && places.length) {
-                    addLog(`Ditemukan ${places.length} tempat. Menampilkan daftar...`, 'success');
-                    renderNearbyPlaces(places);
+                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                    addLog(`Ditemukan ${results.length} tempat. Menampilkan daftar...`, 'success');
+                    renderNearbyPlaces(results);
                 } else {
-                    addLog(`Tidak ada tempat yang ditemukan.`, 'info');
-                    placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Tidak ada tempat yang ditemukan.</li>`;
+                    addLog(`Pencarian gagal atau tidak ada hasil. Status: ${status}`, 'error');
+                    placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Pencarian gagal. Status: ${status}</li>`;
                 }
-            } catch (error) {
-                placesLoader.classList.add('hidden');
-                addLog(`Pencarian gagal: ${error.message}`, 'error');
-                placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Pencarian gagal. Periksa konsol untuk detail.</li>`;
-            }
+            });
         }
 
         /**
          * Menampilkan daftar tempat terdekat ke UI.
          */
-        async function renderNearbyPlaces(places) {
+        function renderNearbyPlaces(places) {
             // Hapus marker lama
-            markers.forEach(marker => marker.map = null);
+            markers.forEach(marker => marker.setMap(null));
             markers = [];
-            
-            let placesWithDetails = [];
 
-            for (const place of places) {
-                try {
-                    if (!place.displayName) {
-                       await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-                    }
-                    const distance = window.Geometry.computeDistanceBetween(
-                        new google.maps.LatLng(userLocation.lat, userLocation.lng),
-                        place.location
-                    );
-                    placesWithDetails.push({ ...place, distance });
-                } catch (error) {
-                    addLog(`Gagal mengambil detail untuk place ID: ${place.id}. Error: ${error.message}`, 'error');
-                }
-            }
+            const placesWithDistance = places.map(place => {
+                const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                    new google.maps.LatLng(userLocation.lat, userLocation.lng),
+                    place.geometry.location // Properti lokasi ada di dalam 'geometry'
+                );
+                return { ...place, distance };
+            });
 
             // Urutkan berdasarkan jarak terdekat
-            placesWithDetails.sort((a, b) => a.distance - b.distance);
+            placesWithDistance.sort((a, b) => a.distance - b.distance);
 
-            placesWithDetails.forEach(place => {
-                // Tambahkan marker ke peta menggunakan AdvancedMarkerElement
-                const marker = new window.AdvancedMarkerElement({
-                    position: place.location,
+            placesWithDistance.forEach(place => {
+                // Tambahkan marker ke peta
+                const marker = new google.maps.Marker({
+                    position: place.geometry.location,
                     map,
-                    title: place.displayName,
+                    title: place.name,
                 });
                 markers.push(marker);
 
                 // Buat item di daftar
                 const li = document.createElement('li');
                 li.className = 'place-item p-4';
-                li.dataset.placeId = place.id;
+                li.dataset.placeId = place.place_id;
 
                 const placeName = document.createElement('h3');
                 placeName.className = 'font-semibold text-lg';
-                placeName.textContent = place.displayName;
+                placeName.textContent = place.name;
 
                 const placeVicinity = document.createElement('p');
                 placeVicinity.className = 'text-gray-600 text-sm';
-                placeVicinity.textContent = place.formattedAddress;
+                placeVicinity.textContent = place.vicinity;
                 
                 const placeDistance = document.createElement('p');
                 placeDistance.className = 'text-blue-600 font-semibold text-sm mt-1';
@@ -376,7 +339,7 @@
                 li.appendChild(placeVicinity);
                 li.appendChild(placeDistance);
                 
-                li.addEventListener('click', () => handleAnalysis(place.id, place.displayName));
+                li.addEventListener('click', () => handleAnalysis(place.place_id, place.name));
                 placesList.appendChild(li);
             });
         }
@@ -472,7 +435,7 @@
 
     <!-- PENTING: Muat Google Maps JavaScript API SETELAH script kita didefinisikan -->
     <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places,geometry,marker&callback=initApp" async defer></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places,geometry&callback=initApp" async defer></script>
 
 </body>
 </html>
