@@ -145,17 +145,13 @@
 
     </div>
 
-    <!-- PENTING: Muat Google Maps JavaScript API TANPA callback -->
-    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&loading=async"></script>
-
     <script>
         // --- KONFIGURASI ---
         const BACKEND_URL = 'https://review-pintar-backend-523600897133.asia-southeast1.run.app/api/analyze'; 
         let userLocation = null;
         let map;
         let markers = [];
-        let Place, Geometry; // Variabel untuk menyimpan library yang diimpor
+        let Place, Geometry, AdvancedMarkerElement; // Variabel untuk menyimpan library yang diimpor
         
         // --- ELEMEN DOM ---
         let logConsole, getLocationBtn, locationPromptDiv, placeTypeSelectorDiv, mapAndListContainer, nearbyPlacesDiv, placesLoader, placesList, resultsDiv, analysisLoader, errorDiv, errorMessage, resultsContent, overallSentimentEl, summaryEl, aspectsList;
@@ -175,9 +171,9 @@
         }
         
         /**
-         * Fungsi utama yang dijalankan saat halaman dimuat.
+         * Fungsi ini dipanggil oleh Google Maps setelah script-nya siap.
          */
-        async function main() {
+        async function initApp() {
             addLog("Memulai script frontend...");
 
             // Mengambil elemen DOM
@@ -199,12 +195,17 @@
             aspectsList = document.getElementById('aspects');
 
             try {
-                // === PERBAIKAN UTAMA: Mengimpor library secara dinamis ===
+                // === PERBAIKAN UTAMA: Mengimpor semua library yang dibutuhkan ===
                 const { Place } = await google.maps.importLibrary("places");
                 const { spherical } = await google.maps.importLibrary("geometry");
-                window.Place = Place; // Menyimpan referensi global jika diperlukan
+                const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+                
+                // Menyimpan referensi global
+                window.Place = Place;
                 window.Geometry = spherical;
-                addLog("Library 'Places' dan 'Geometry' berhasil dimuat.", 'success');
+                window.AdvancedMarkerElement = AdvancedMarkerElement;
+
+                addLog("Library 'Places', 'Geometry', dan 'Marker' berhasil dimuat.", 'success');
             } catch (error) {
                 addLog(`Gagal memuat library Google Maps: ${error.message}`, 'error');
                 return; // Hentikan eksekusi jika library gagal dimuat
@@ -249,21 +250,23 @@
             map = new google.maps.Map(document.getElementById("map"), {
                 center: userLocation,
                 zoom: 15,
+                mapId: 'REVIEWER_PINTAR_MAP' // ID Peta diperlukan untuk Advanced Markers
             });
+
             // Menambahkan marker untuk lokasi pengguna
-            new google.maps.Marker({
+            const userMarker = new window.AdvancedMarkerElement({
                 position: userLocation,
                 map: map,
                 title: "Lokasi Anda",
-                icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
-                    fillColor: "#4285F4",
-                    fillOpacity: 1,
-                    strokeWeight: 2,
-                    strokeColor: "white",
-                },
             });
+            // Customisasi marker pengguna dengan CSS
+            const userIcon = document.createElement('div');
+            userIcon.style.width = '20px';
+            userIcon.style.height = '20px';
+            userIcon.style.backgroundColor = '#4285F4';
+            userIcon.style.border = '2px solid white';
+            userIcon.style.borderRadius = '50%';
+            userMarker.content = userIcon;
         }
 
         /**
@@ -296,7 +299,6 @@
             };
 
             try {
-                // Menggunakan referensi yang sudah diimpor
                 const { places } = await window.Place.searchNearby(request);
                 
                 placesLoader.classList.add('hidden');
@@ -321,15 +323,13 @@
          */
         async function renderNearbyPlaces(places) {
             // Hapus marker lama
-            markers.forEach(marker => marker.setMap(null));
+            markers.forEach(marker => marker.map = null);
             markers = [];
             
             let placesWithDetails = [];
 
-            // === PERBAIKAN UTAMA: Mengambil detail untuk setiap tempat ===
             for (const place of places) {
                 try {
-                    // Cek apakah detail sudah ada, jika tidak, baru fetch
                     if (!place.displayName) {
                        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
                     }
@@ -347,8 +347,8 @@
             placesWithDetails.sort((a, b) => a.distance - b.distance);
 
             placesWithDetails.forEach(place => {
-                // Tambahkan marker ke peta
-                const marker = new google.maps.Marker({
+                // Tambahkan marker ke peta menggunakan AdvancedMarkerElement
+                const marker = new window.AdvancedMarkerElement({
                     position: place.location,
                     map,
                     title: place.displayName,
@@ -468,9 +468,11 @@
             resultsContent.classList.add('hidden');
         }
 
-        // Memanggil fungsi utama saat halaman dimuat
-        main();
     </script>
+
+    <!-- PENTING: Muat Google Maps JavaScript API SETELAH script kita didefinisikan -->
+    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places,geometry,marker&callback=initApp" async defer></script>
 
 </body>
 </html>
