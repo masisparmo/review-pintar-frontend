@@ -227,7 +227,6 @@
             placesList.innerHTML = '';
             addLog(`Memulai pencarian tempat terdekat dengan tipe: '${type}'...`);
 
-            // === PERBAIKAN UTAMA: Menghapus properti 'fields' yang tidak diperlukan ===
             const request = {
                 includedTypes: [type],
                 locationRestriction: {
@@ -373,7 +372,7 @@
     </script>
 
     <!-- PENTING: Muat Google Maps JavaScript API SETELAH script kita didefinisikan -->
-    <!-- Ganti 'MASUKKAN_API_KEY_ANDA' dengan Google Maps API Key Anda yang sebenarnya! -->
+    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places&callback=initApp" async defer></script>
 
 </body>
