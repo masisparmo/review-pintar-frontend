@@ -145,13 +145,17 @@
 
     </div>
 
-    <!-- === PERBAIKAN: Script utama dipindahkan SEBELUM memuat Google Maps === -->
+    <!-- PENTING: Muat Google Maps JavaScript API TANPA callback -->
+    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&loading=async"></script>
+
     <script>
         // --- KONFIGURASI ---
         const BACKEND_URL = 'https://review-pintar-backend-523600897133.asia-southeast1.run.app/api/analyze'; 
         let userLocation = null;
         let map;
         let markers = [];
+        let Place, Geometry; // Variabel untuk menyimpan library yang diimpor
         
         // --- ELEMEN DOM ---
         let logConsole, getLocationBtn, locationPromptDiv, placeTypeSelectorDiv, mapAndListContainer, nearbyPlacesDiv, placesLoader, placesList, resultsDiv, analysisLoader, errorDiv, errorMessage, resultsContent, overallSentimentEl, summaryEl, aspectsList;
@@ -170,13 +174,11 @@
             logConsole.scrollTop = logConsole.scrollHeight;
         }
         
-        addLog("Memulai script frontend...");
-
         /**
-         * Fungsi ini dipanggil oleh Google Maps setelah script-nya siap.
+         * Fungsi utama yang dijalankan saat halaman dimuat.
          */
-        window.initApp = function() {
-            addLog("Google Maps API berhasil dimuat dan memanggil initApp().", 'success');
+        async function main() {
+            addLog("Memulai script frontend...");
 
             // Mengambil elemen DOM
             logConsole = document.getElementById('log-console');
@@ -195,6 +197,18 @@
             overallSentimentEl = document.getElementById('overallSentiment');
             summaryEl = document.getElementById('summary');
             aspectsList = document.getElementById('aspects');
+
+            try {
+                // === PERBAIKAN UTAMA: Mengimpor library secara dinamis ===
+                const { Place } = await google.maps.importLibrary("places");
+                const { spherical } = await google.maps.importLibrary("geometry");
+                window.Place = Place; // Menyimpan referensi global jika diperlukan
+                window.Geometry = spherical;
+                addLog("Library 'Places' dan 'Geometry' berhasil dimuat.", 'success');
+            } catch (error) {
+                addLog(`Gagal memuat library Google Maps: ${error.message}`, 'error');
+                return; // Hentikan eksekusi jika library gagal dimuat
+            }
             
             addLog("Aplikasi siap. Menunggu aksi pengguna...");
             getLocationBtn.addEventListener('click', getUserLocation);
@@ -269,10 +283,8 @@
             
             initMap(); // Inisialisasi peta di sini
 
-            // === PERBAIKAN UTAMA: Menambahkan properti 'fields' yang wajib ada ===
             const request = {
-                // Kita harus memberitahu API data apa saja yang kita butuhkan
-                fields: ['id', 'displayName', 'formattedAddress', 'location', 'rating', 'userRatingCount'],
+                fields: ['id', 'displayName', 'formattedAddress', 'location'],
                 includedTypes: [type],
                 locationRestriction: {
                     center: {
@@ -284,7 +296,8 @@
             };
 
             try {
-                const { places } = await google.maps.places.Place.searchNearby(request);
+                // Menggunakan referensi yang sudah diimpor
+                const { places } = await window.Place.searchNearby(request);
                 
                 placesLoader.classList.add('hidden');
                 addLog(`Pencarian selesai.`, 'info');
@@ -312,7 +325,7 @@
             markers = [];
 
             const placesWithDistance = places.map(place => {
-                const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                const distance = window.Geometry.computeDistanceBetween(
                     new google.maps.LatLng(userLocation.lat, userLocation.lng),
                     place.location
                 );
@@ -443,11 +456,10 @@
             errorDiv.classList.add('hidden');
             resultsContent.classList.add('hidden');
         }
-    </script>
 
-    <!-- PENTING: Muat Google Maps JavaScript API SETELAH script kita didefinisikan -->
-    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. Tambahkan library 'geometry' untuk perhitungan jarak -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places,geometry&callback=initApp" async defer></script>
+        // Memanggil fungsi utama saat halaman dimuat
+        main();
+    </script>
 
 </body>
 </html>
