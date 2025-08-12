@@ -284,6 +284,7 @@
             initMap(); // Inisialisasi peta di sini
 
             const request = {
+                fields: ['id', 'displayName', 'formattedAddress', 'location'],
                 includedTypes: [type],
                 locationRestriction: {
                     center: {
@@ -328,7 +329,10 @@
             // === PERBAIKAN UTAMA: Mengambil detail untuk setiap tempat ===
             for (const place of places) {
                 try {
-                    await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+                    // Cek apakah detail sudah ada, jika tidak, baru fetch
+                    if (!place.displayName) {
+                       await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+                    }
                     const distance = window.Geometry.computeDistanceBetween(
                         new google.maps.LatLng(userLocation.lat, userLocation.lng),
                         place.location
