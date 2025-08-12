@@ -269,7 +269,10 @@
             
             initMap(); // Inisialisasi peta di sini
 
+            // === PERBAIKAN UTAMA: Menambahkan properti 'fields' yang wajib ada ===
             const request = {
+                // Kita harus memberitahu API data apa saja yang kita butuhkan
+                fields: ['id', 'displayName', 'formattedAddress', 'location', 'rating', 'userRatingCount'],
                 includedTypes: [type],
                 locationRestriction: {
                     center: {
