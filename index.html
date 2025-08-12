@@ -145,10 +145,6 @@
 
     </div>
 
-    <!-- PENTING: Muat Google Maps JavaScript API TANPA callback -->
-    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&loading=async"></script>
-
     <script>
         // --- KONFIGURASI ---
         const BACKEND_URL = 'https://review-pintar-backend-523600897133.asia-southeast1.run.app/api/analyze'; 
@@ -175,9 +171,9 @@
         }
         
         /**
-         * Fungsi utama yang dijalankan saat halaman dimuat.
+         * Fungsi ini dipanggil oleh Google Maps setelah script-nya siap.
          */
-        async function main() {
+        window.initApp = async function() {
             addLog("Memulai script frontend...");
 
             // Mengambil elemen DOM
@@ -199,15 +195,15 @@
             aspectsList = document.getElementById('aspects');
 
             try {
-                // === PERBAIKAN UTAMA: Mengimpor library secara dinamis ===
+                // Mengimpor library secara dinamis
                 const { Place } = await google.maps.importLibrary("places");
                 const { spherical } = await google.maps.importLibrary("geometry");
-                window.Place = Place; // Menyimpan referensi global jika diperlukan
+                window.Place = Place;
                 window.Geometry = spherical;
                 addLog("Library 'Places' dan 'Geometry' berhasil dimuat.", 'success');
             } catch (error) {
                 addLog(`Gagal memuat library Google Maps: ${error.message}`, 'error');
-                return; // Hentikan eksekusi jika library gagal dimuat
+                return;
             }
             
             addLog("Aplikasi siap. Menunggu aksi pengguna...");
@@ -326,7 +322,6 @@
             
             let placesWithDetails = [];
 
-            // === PERBAIKAN UTAMA: Mengambil detail untuk setiap tempat ===
             for (const place of places) {
                 try {
                     // Cek apakah detail sudah ada, jika tidak, baru fetch
@@ -468,9 +463,11 @@
             resultsContent.classList.add('hidden');
         }
 
-        // Memanggil fungsi utama saat halaman dimuat
-        main();
     </script>
+
+    <!-- PENTING: Muat Google Maps JavaScript API SETELAH script kita didefinisikan -->
+    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places,geometry&callback=initApp" async defer></script>
 
 </body>
 </html>
