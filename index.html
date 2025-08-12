@@ -284,7 +284,6 @@
             initMap(); // Inisialisasi peta di sini
 
             const request = {
-                fields: ['id', 'displayName', 'formattedAddress', 'location'],
                 includedTypes: [type],
                 locationRestriction: {
                     center: {
@@ -319,23 +318,31 @@
         /**
          * Menampilkan daftar tempat terdekat ke UI.
          */
-        function renderNearbyPlaces(places) {
+        async function renderNearbyPlaces(places) {
             // Hapus marker lama
             markers.forEach(marker => marker.setMap(null));
             markers = [];
+            
+            let placesWithDetails = [];
 
-            const placesWithDistance = places.map(place => {
-                const distance = window.Geometry.computeDistanceBetween(
-                    new google.maps.LatLng(userLocation.lat, userLocation.lng),
-                    place.location
-                );
-                return { ...place, distance };
-            });
+            // === PERBAIKAN UTAMA: Mengambil detail untuk setiap tempat ===
+            for (const place of places) {
+                try {
+                    await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+                    const distance = window.Geometry.computeDistanceBetween(
+                        new google.maps.LatLng(userLocation.lat, userLocation.lng),
+                        place.location
+                    );
+                    placesWithDetails.push({ ...place, distance });
+                } catch (error) {
+                    addLog(`Gagal mengambil detail untuk place ID: ${place.id}. Error: ${error.message}`, 'error');
+                }
+            }
 
             // Urutkan berdasarkan jarak terdekat
-            placesWithDistance.sort((a, b) => a.distance - b.distance);
+            placesWithDetails.sort((a, b) => a.distance - b.distance);
 
-            placesWithDistance.forEach(place => {
+            placesWithDetails.forEach(place => {
                 // Tambahkan marker ke peta
                 const marker = new google.maps.Marker({
                     position: place.location,
