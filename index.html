@@ -134,7 +134,7 @@
 
     <!-- PENTING: Muat Google Maps JavaScript API -->
     <!-- Ganti 'MASUKKAN_API_KEY_ANDA' dengan Google Maps API Key Anda yang sebenarnya! -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=MASUKKAN_API_KEY_ANDA&libraries=places&callback=initApp" async defer></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places&callback=initApp" async defer></script>
 
     <script>
         // --- KONFIGURASI ---
@@ -173,10 +173,9 @@
         // Menambahkan log paling awal untuk memastikan JavaScript berjalan
         addLog("Memulai script frontend...");
 
-        /**
-         * Fungsi ini dipanggil setelah script Google Maps selesai dimuat.
-         */
-        function initApp() {
+        // === PERBAIKAN UTAMA: Membuat initApp sebagai fungsi global ===
+        // Dengan cara ini, Google Maps API pasti bisa menemukannya.
+        window.initApp = function() {
             addLog("Google Maps API berhasil dimuat dan memanggil initApp().", 'success');
             addLog("Aplikasi siap. Menunggu aksi pengguna...");
             getLocationBtn.addEventListener('click', getUserLocation);
@@ -340,7 +339,7 @@
                         aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-200 rounded-full';
                     }
                     li.appendChild(aspectName);
-li.appendChild(aspectSentiment);
+                    li.appendChild(aspectSentiment);
                     aspectsList.appendChild(li);
                 });
             } else {
