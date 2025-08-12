@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reviewer Pintar - Analis Ulasan AI</title>
+    <!-- Memuat Tailwind CSS untuk styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Memuat Font Inter dari Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Menggunakan font Inter sebagai default */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style untuk spinner/loader */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-2xl">
+        
+        <!-- Header Aplikasi -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-blue-600">Reviewer Pintar</h1>
+            <p class="text-lg text-gray-600 mt-2">Dapatkan intisari ulasan dengan kekuatan AI Llama3</p>
+        </header>
+
+        <!-- Form Input -->
+        <main class="bg-white p-6 rounded-xl shadow-md">
+            <div class="flex flex-col space-y-4">
+                <label for="placeIdInput" class="text-lg font-semibold">Masukkan Google Maps Place ID:</label>
+                <input type="text" id="placeIdInput" placeholder="Contoh: ChIJN1t_tDeuEmsRUsoyG83frY4" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <button id="analyzeBtn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors duration-300 shadow-sm">
+                    Analisis Sekarang
+                </button>
+            </div>
+        </main>
+
+        <!-- Area Hasil Analisis -->
+        <div id="results" class="mt-8 hidden">
+            <!-- Loader/Spinner -->
+            <div id="loader" class="flex justify-center items-center py-8">
+                <div class="loader"></div>
+                <p class="ml-4 text-gray-600">Menganalisis ulasan...</p>
+            </div>
+
+            <!-- Pesan Error -->
+            <div id="error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-center">
+                <strong class="font-bold">Oops!</strong>
+                <span class="block sm:inline" id="errorMessage">Terjadi kesalahan. Silakan coba lagi.</span>
+            </div>
+
+            <!-- Konten Hasil -->
+            <div id="resultsContent" class="hidden bg-white p-6 rounded-xl shadow-md animate-fade-in">
+                <h2 class="text-2xl font-bold mb-4 border-b pb-2">Hasil Analisis AI</h2>
+                
+                <!-- Sentimen Keseluruhan -->
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-2">Sentimen Keseluruhan</h3>
+                    <p id="overallSentiment" class="text-lg font-medium p-3 rounded-lg"></p>
+                </div>
+
+                <!-- Ringkasan AI -->
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-2">Ringkasan AI</h3>
+                    <p id="summary" class="text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-lg"></p>
+                </div>
+
+                <!-- Analisis Aspek -->
+                <div>
+                    <h3 class="text-xl font-semibold mb-2">Aspek Utama yang Dibicarakan</h3>
+                    <ul id="aspects" class="space-y-2">
+                        <!-- Aspek akan ditambahkan di sini oleh JavaScript -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- KONFIGURASI ---
+        // GANTI URL INI dengan URL Cloud Run Anda yang sebenarnya!
+        const BACKEND_URL = 'https://review-pintar-backend-523600897133.asia-southeast1.run.app/api/analyze'; 
+        
+        // --- ELEMEN DOM ---
+        const placeIdInput = document.getElementById('placeIdInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const resultsDiv = document.getElementById('results');
+        const loader = document.getElementById('loader');
+        const errorDiv = document.getElementById('error');
+        const errorMessage = document.getElementById('errorMessage');
+        const resultsContent = document.getElementById('resultsContent');
+        
+        const overallSentimentEl = document.getElementById('overallSentiment');
+        const summaryEl = document.getElementById('summary');
+        const aspectsList = document.getElementById('aspects');
+
+        // --- EVENT LISTENER ---
+        analyzeBtn.addEventListener('click', handleAnalysis);
+
+        /**
+         * Fungsi utama untuk menangani proses analisis saat tombol ditekan.
+         */
+        async function handleAnalysis() {
+            const placeId = placeIdInput.value.trim();
+
+            if (!placeId) {
+                alert('Place ID tidak boleh kosong!');
+                return;
+            }
+
+            // Reset UI
+            resetUI();
+            resultsDiv.classList.remove('hidden');
+            loader.classList.remove('hidden');
+
+            try {
+                const response = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ placeId: placeId }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                // Parsing hasil dari backend, yang ternyata adalah string JSON
+                const rawData = await response.json();
+                const data = JSON.parse(rawData);
+                
+                renderResults(data);
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Menampilkan data hasil analisis ke UI.
+         * @param {object} data - Objek hasil analisis dari backend.
+         */
+        function renderResults(data) {
+            // Sentimen Keseluruhan
+            overallSentimentEl.textContent = data.sentimen_keseluruhan || 'Tidak tersedia';
+            // Memberi warna berdasarkan sentimen
+            if (data.sentimen_keseluruhan === 'Positif') {
+                overallSentimentEl.className = 'text-lg font-medium p-3 rounded-lg bg-green-100 text-green-800';
+            } else if (data.sentimen_keseluruhan === 'Negatif') {
+                overallSentimentEl.className = 'text-lg font-medium p-3 rounded-lg bg-red-100 text-red-800';
+            } else {
+                overallSentimentEl.className = 'text-lg font-medium p-3 rounded-lg bg-yellow-100 text-yellow-800';
+            }
+
+            // Ringkasan
+            summaryEl.textContent = data.ringkasan || 'Tidak ada ringkasan.';
+
+            // Aspek
+            aspectsList.innerHTML = ''; // Kosongkan daftar sebelumnya
+            if (data.aspek_utama && Array.isArray(data.aspek_utama)) {
+                data.aspek_utama.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'p-3 bg-gray-50 rounded-lg flex justify-between items-center';
+                    
+                    const aspectName = document.createElement('span');
+                    aspectName.className = 'font-medium';
+                    aspectName.textContent = item.aspek;
+                    
+                    const aspectSentiment = document.createElement('span');
+                    aspectSentiment.textContent = item.sentimen;
+
+                    // Memberi warna pada sentimen aspek
+                    if (item.sentimen === 'Positif') {
+                        aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-green-800 bg-green-200 rounded-full';
+                    } else if (item.sentimen === 'Negatif') {
+                        aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-red-800 bg-red-200 rounded-full';
+                    } else {
+                        aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-200 rounded-full';
+                    }
+                    
+                    li.appendChild(aspectName);
+                    li.appendChild(aspectSentiment);
+                    aspectsList.appendChild(li);
+                });
+            } else {
+                aspectsList.innerHTML = '<li>Tidak ada analisis aspek yang ditemukan.</li>';
+            }
+
+            resultsContent.classList.remove('hidden');
+        }
+
+        /**
+         * Menampilkan pesan error di UI.
+         * @param {string} message - Pesan error yang akan ditampilkan.
+         */
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        /**
+         * Mereset UI ke kondisi awal sebelum analisis baru.
+         */
+        function resetUI() {
+            resultsDiv.classList.add('hidden');
+            loader.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+            resultsContent.classList.add('hidden');
+        }
+
+    </script>
+</body>
+</html>
