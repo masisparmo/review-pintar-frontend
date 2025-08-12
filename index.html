@@ -53,6 +53,13 @@
         .log-entry.info { color: #63b3ed; } /* text-blue-400 */
         .log-entry.success { color: #68d391; } /* text-green-400 */
         .log-entry.error { color: #fc8181; } /* text-red-400 */
+        /* Style untuk kontainer peta */
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 0.75rem; /* rounded-xl */
+            margin-bottom: 2rem; /* mb-8 */
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -85,16 +92,23 @@
                 </div>
             </div>
         </main>
-
-        <!-- Daftar Tempat Terdekat -->
-        <div id="nearby-places" class="mt-8 hidden">
-            <h2 class="text-2xl font-bold mb-4">Pilih Tempat untuk Dianalisis:</h2>
-            <div id="places-loader" class="flex justify-center items-center py-8">
-                <div class="loader"></div>
-                <p class="ml-4 text-gray-600">Mencari tempat terdekat...</p>
+        
+        <!-- Kontainer Peta dan Daftar Tempat -->
+        <div id="map-and-list-container" class="mt-8 hidden">
+            <!-- Div untuk Peta Google Maps -->
+            <div id="map"></div>
+            
+            <!-- Daftar Tempat Terdekat -->
+            <div id="nearby-places">
+                <h2 class="text-2xl font-bold mb-4">Pilih Tempat untuk Dianalisis:</h2>
+                <div id="places-loader" class="flex justify-center items-center py-8">
+                    <div class="loader"></div>
+                    <p class="ml-4 text-gray-600">Mencari tempat terdekat...</p>
+                </div>
+                <ul id="places-list" class="bg-white rounded-xl shadow-md divide-y"></ul>
             </div>
-            <ul id="places-list" class="bg-white rounded-xl shadow-md divide-y"></ul>
         </div>
+
 
         <!-- Area Hasil Analisis -->
         <div id="results" class="mt-8 hidden">
@@ -136,16 +150,17 @@
         // --- KONFIGURASI ---
         const BACKEND_URL = 'https://review-pintar-backend-523600897133.asia-southeast1.run.app/api/analyze'; 
         let userLocation = null;
+        let map;
+        let markers = [];
         
         // --- ELEMEN DOM ---
-        // Variabel ini akan diisi setelah DOM dimuat
-        let logConsole, getLocationBtn, locationPromptDiv, placeTypeSelectorDiv, nearbyPlacesDiv, placesLoader, placesList, resultsDiv, analysisLoader, errorDiv, errorMessage, resultsContent, overallSentimentEl, summaryEl, aspectsList;
+        let logConsole, getLocationBtn, locationPromptDiv, placeTypeSelectorDiv, mapAndListContainer, nearbyPlacesDiv, placesLoader, placesList, resultsDiv, analysisLoader, errorDiv, errorMessage, resultsContent, overallSentimentEl, summaryEl, aspectsList;
 
         /**
          * Fungsi untuk menambahkan pesan ke konsol log di UI.
          */
         function addLog(message, type = 'info') {
-            if (!logConsole) { // Pastikan log console sudah ada
+            if (!logConsole) {
                 logConsole = document.getElementById('log-console');
             }
             const logEntry = document.createElement('div');
@@ -163,11 +178,12 @@
         window.initApp = function() {
             addLog("Google Maps API berhasil dimuat dan memanggil initApp().", 'success');
 
-            // Mengambil elemen DOM setelah halaman pasti sudah dimuat
+            // Mengambil elemen DOM
             logConsole = document.getElementById('log-console');
             getLocationBtn = document.getElementById('getLocationBtn');
             locationPromptDiv = document.getElementById('location-prompt');
             placeTypeSelectorDiv = document.getElementById('place-type-selector');
+            mapAndListContainer = document.getElementById('map-and-list-container');
             nearbyPlacesDiv = document.getElementById('nearby-places');
             placesLoader = document.getElementById('places-loader');
             placesList = document.getElementById('places-list');
@@ -211,6 +227,30 @@
                 alert('Browser Anda tidak mendukung Geolocation.');
             }
         }
+        
+        /**
+         * Inisialisasi peta Google Maps.
+         */
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: userLocation,
+                zoom: 15,
+            });
+            // Menambahkan marker untuk lokasi pengguna
+            new google.maps.Marker({
+                position: userLocation,
+                map: map,
+                title: "Lokasi Anda",
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: "#4285F4",
+                    fillOpacity: 1,
+                    strokeWeight: 2,
+                    strokeColor: "white",
+                },
+            });
+        }
 
         /**
          * Mencari tempat terdekat menggunakan Places API yang baru.
@@ -222,10 +262,12 @@
             }
             
             resetUI();
-            nearbyPlacesDiv.classList.remove('hidden');
+            mapAndListContainer.classList.remove('hidden');
             placesLoader.classList.remove('hidden');
             placesList.innerHTML = '';
             addLog(`Memulai pencarian tempat terdekat dengan tipe: '${type}'...`);
+            
+            initMap(); // Inisialisasi peta di sini
 
             const request = {
                 includedTypes: [type],
@@ -234,7 +276,7 @@
                         lat: userLocation.lat,
                         lng: userLocation.lng,
                     },
-                    radius: 2000, // Radius 2 km
+                    radius: 1000, // Radius 1 km
                 },
             };
 
@@ -262,7 +304,31 @@
          * Menampilkan daftar tempat terdekat ke UI.
          */
         function renderNearbyPlaces(places) {
-            places.forEach(place => {
+            // Hapus marker lama
+            markers.forEach(marker => marker.setMap(null));
+            markers = [];
+
+            const placesWithDistance = places.map(place => {
+                const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                    new google.maps.LatLng(userLocation.lat, userLocation.lng),
+                    place.location
+                );
+                return { ...place, distance };
+            });
+
+            // Urutkan berdasarkan jarak terdekat
+            placesWithDistance.sort((a, b) => a.distance - b.distance);
+
+            placesWithDistance.forEach(place => {
+                // Tambahkan marker ke peta
+                const marker = new google.maps.Marker({
+                    position: place.location,
+                    map,
+                    title: place.displayName,
+                });
+                markers.push(marker);
+
+                // Buat item di daftar
                 const li = document.createElement('li');
                 li.className = 'place-item p-4';
                 li.dataset.placeId = place.id;
@@ -274,9 +340,14 @@
                 const placeVicinity = document.createElement('p');
                 placeVicinity.className = 'text-gray-600 text-sm';
                 placeVicinity.textContent = place.formattedAddress;
+                
+                const placeDistance = document.createElement('p');
+                placeDistance.className = 'text-blue-600 font-semibold text-sm mt-1';
+                placeDistance.textContent = `Jarak: ${Math.round(place.distance)} meter`;
 
                 li.appendChild(placeName);
                 li.appendChild(placeVicinity);
+                li.appendChild(placeDistance);
                 
                 li.addEventListener('click', () => handleAnalysis(place.id, place.displayName));
                 placesList.appendChild(li);
@@ -289,7 +360,7 @@
         async function handleAnalysis(placeId, placeName) {
             addLog(`Memulai analisis untuk '${placeName}' (ID: ${placeId})...`);
             resetUI();
-            nearbyPlacesDiv.classList.add('hidden');
+            mapAndListContainer.classList.add('hidden');
             resultsDiv.classList.remove('hidden');
             analysisLoader.classList.remove('hidden');
 
@@ -372,8 +443,8 @@
     </script>
 
     <!-- PENTING: Muat Google Maps JavaScript API SETELAH script kita didefinisikan -->
-    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places&callback=initApp" async defer></script>
+    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. Tambahkan library 'geometry' untuk perhitungan jarak -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places,geometry&callback=initApp" async defer></script>
 
 </body>
 </html>
