@@ -151,7 +151,7 @@
         let userLocation = null;
         let map;
         let markers = [];
-        let placesService; // Variabel untuk menyimpan service Places
+        let placesService;
         
         // --- ELEMEN DOM ---
         let logConsole, getLocationBtn, locationPromptDiv, placeTypeSelectorDiv, mapAndListContainer, nearbyPlacesDiv, placesLoader, placesList, resultsDiv, analysisLoader, errorDiv, errorMessage, resultsContent, overallSentimentEl, summaryEl, aspectsList;
@@ -267,7 +267,6 @@
             
             initMap(); // Inisialisasi peta di sini
 
-            // === PERBAIKAN UTAMA: Menggunakan google.maps.places.PlacesService ===
             placesService = new google.maps.places.PlacesService(map);
 
             const request = {
