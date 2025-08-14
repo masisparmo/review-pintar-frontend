@@ -151,7 +151,7 @@
         let userLocation = null;
         let map;
         let markers = [];
-        let placesService;
+        // placesService tidak lagi digunakan
         
         // --- ELEMEN DOM ---
         let logConsole, getLocationBtn, locationPromptDiv, placeTypeSelectorDiv, mapAndListContainer, nearbyPlacesDiv, placesLoader, placesList, resultsDiv, analysisLoader, errorDiv, errorMessage, resultsContent, overallSentimentEl, summaryEl, aspectsList;
@@ -173,7 +173,7 @@
         /**
          * Fungsi ini dipanggil oleh Google Maps setelah script-nya siap.
          */
-        function initApp() {
+        async function initApp() {
             addLog("Memulai script frontend...");
 
             // Mengambil elemen DOM
@@ -193,12 +193,17 @@
             overallSentimentEl = document.getElementById('overallSentiment');
             summaryEl = document.getElementById('summary');
             aspectsList = document.getElementById('aspects');
+
+            // PERBAIKAN: Memuat library 'places' dan 'maps' dari Google Maps API
+            const { Map } = await google.maps.importLibrary("maps");
+            const { Place } = await google.maps.importLibrary("places");
+            const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
             
             addLog("Aplikasi siap. Menunggu aksi pengguna...");
             getLocationBtn.addEventListener('click', getUserLocation);
             
             document.querySelectorAll('.place-type-btn').forEach(button => {
-                button.addEventListener('click', () => findNearbyPlaces(button.dataset.type));
+                button.addEventListener('click', () => findNearbyPlaces(button.dataset.type, Map, Place, AdvancedMarkerElement));
             });
         }
 
@@ -229,31 +234,26 @@
         /**
          * Inisialisasi peta Google Maps.
          */
-        function initMap() {
-            map = new google.maps.Map(document.getElementById("map"), {
+        function initMap(Map, AdvancedMarkerElement) {
+             // Pastikan map di-re-instance jika belum ada atau untuk pencarian baru
+            map = new Map(document.getElementById("map"), {
                 center: userLocation,
                 zoom: 15,
+                mapId: 'REVIEWER_PINTAR_MAP_ID' // Diperlukan untuk Advanced Markers
             });
+            
             // Menambahkan marker untuk lokasi pengguna
-            new google.maps.Marker({
+            const userMarker = new AdvancedMarkerElement({
                 position: userLocation,
                 map: map,
                 title: "Lokasi Anda",
-                icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
-                    fillColor: "#4285F4",
-                    fillOpacity: 1,
-                    strokeWeight: 2,
-                    strokeColor: "white",
-                },
             });
         }
 
         /**
-         * Mencari tempat terdekat menggunakan Places API yang stabil.
+         * PERBAIKAN: Mencari tempat terdekat menggunakan Place.searchNearby()
          */
-        function findNearbyPlaces(type) {
+        async function findNearbyPlaces(type, Map, Place, AdvancedMarkerElement) {
             if (!userLocation) {
                 addLog('Lokasi pengguna tidak ditemukan untuk memulai pencarian.', 'error');
                 return;
@@ -265,42 +265,53 @@
             placesList.innerHTML = '';
             addLog(`Memulai pencarian tempat terdekat dengan tipe: '${type}'...`);
             
-            initMap(); // Inisialisasi peta di sini
+            initMap(Map, AdvancedMarkerElement); // Inisialisasi peta di sini
 
-            placesService = new google.maps.places.PlacesService(map);
-
+            // PERBAIKAN: Request object untuk Place.searchNearby
             const request = {
                 location: new google.maps.LatLng(userLocation.lat, userLocation.lng),
-                radius: '1000', // Radius 1 km
-                type: [type]
+                radius: 1000, // Radius 1 km
+                includedTypes: [type],
+                // Tentukan field yang dibutuhkan untuk mengurangi biaya API
+                fields: ['id', 'displayName', 'location', 'formattedAddress'], 
+                language: 'id-ID', // Request bahasa Indonesia
+                region: 'id',
             };
 
-            placesService.nearbySearch(request, (results, status) => {
+            try {
+                // PERBAIKAN: Menggunakan metode baru Place.searchNearby
+                const { places } = await Place.searchNearby(request);
                 placesLoader.classList.add('hidden');
-                addLog(`Pencarian selesai. Status dari Google: ${status}`, 'info');
-                
-                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-                    addLog(`Ditemukan ${results.length} tempat. Menampilkan daftar...`, 'success');
-                    renderNearbyPlaces(results);
+
+                if (places.length) {
+                    addLog(`Ditemukan ${places.length} tempat. Menampilkan daftar...`, 'success');
+                    renderNearbyPlaces(places, AdvancedMarkerElement);
                 } else {
-                    addLog(`Pencarian gagal atau tidak ada hasil. Status: ${status}`, 'error');
-                    placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Pencarian gagal. Status: ${status}</li>`;
+                    addLog(`Tidak ada hasil yang ditemukan untuk tipe '${type}'.`, 'error');
+                    placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Tidak ada hasil ditemukan. Coba tipe lain.</li>`;
                 }
-            });
+            } catch (error) {
+                placesLoader.classList.add('hidden');
+                addLog(`Pencarian gagal. Error: ${error.message}`, 'error');
+                placesList.innerHTML = `<li class="p-4 text-center text-gray-500">Pencarian gagal. Silakan coba lagi.</li>`;
+                console.error('Place search error:', error);
+            }
         }
 
         /**
-         * Menampilkan daftar tempat terdekat ke UI.
+         * PERBAIKAN: Menampilkan daftar tempat terdekat ke UI.
          */
-        function renderNearbyPlaces(places) {
+        function renderNearbyPlaces(places, AdvancedMarkerElement) {
             // Hapus marker lama
-            markers.forEach(marker => marker.setMap(null));
+            markers.forEach(marker => marker.map = null);
             markers = [];
+            
+            const userLatLng = new google.maps.LatLng(userLocation.lat, userLocation.lng);
 
             const placesWithDistance = places.map(place => {
                 const distance = google.maps.geometry.spherical.computeDistanceBetween(
-                    new google.maps.LatLng(userLocation.lat, userLocation.lng),
-                    place.geometry.location // Properti lokasi ada di dalam 'geometry'
+                    userLatLng,
+                    place.location // PERBAIKAN: Properti lokasi sekarang adalah 'location'
                 );
                 return { ...place, distance };
             });
@@ -309,26 +320,18 @@
             placesWithDistance.sort((a, b) => a.distance - b.distance);
 
             placesWithDistance.forEach(place => {
-                // Tambahkan marker ke peta
-                const marker = new google.maps.Marker({
-                    position: place.geometry.location,
-                    map,
-                    title: place.name,
-                });
-                markers.push(marker);
-
                 // Buat item di daftar
                 const li = document.createElement('li');
                 li.className = 'place-item p-4';
-                li.dataset.placeId = place.place_id;
+                li.dataset.placeId = place.id; // PERBAIKAN: ID sekarang adalah 'id'
 
                 const placeName = document.createElement('h3');
                 placeName.className = 'font-semibold text-lg';
-                placeName.textContent = place.name;
+                placeName.textContent = place.displayName; // PERBAIKAN: Nama sekarang adalah 'displayName'
 
                 const placeVicinity = document.createElement('p');
                 placeVicinity.className = 'text-gray-600 text-sm';
-                placeVicinity.textContent = place.vicinity;
+                placeVicinity.textContent = place.formattedAddress; // PERBAIKAN: Alamat sekarang 'formattedAddress'
                 
                 const placeDistance = document.createElement('p');
                 placeDistance.className = 'text-blue-600 font-semibold text-sm mt-1';
@@ -338,8 +341,16 @@
                 li.appendChild(placeVicinity);
                 li.appendChild(placeDistance);
                 
-                li.addEventListener('click', () => handleAnalysis(place.place_id, place.name));
+                li.addEventListener('click', () => handleAnalysis(place.id, place.displayName));
                 placesList.appendChild(li);
+
+                // Tambahkan marker ke peta
+                const marker = new AdvancedMarkerElement({
+                    position: place.location,
+                    map,
+                    title: place.displayName,
+                });
+                markers.push(marker);
             });
         }
 
@@ -348,10 +359,12 @@
          */
         async function handleAnalysis(placeId, placeName) {
             addLog(`Memulai analisis untuk '${placeName}' (ID: ${placeId})...`);
-            resetUI();
+            // Sembunyikan daftar dan peta, tampilkan loader analisis
             mapAndListContainer.classList.add('hidden');
             resultsDiv.classList.remove('hidden');
             analysisLoader.classList.remove('hidden');
+            errorDiv.classList.add('hidden');
+            resultsContent.classList.add('hidden');
 
             try {
                 const response = await fetch(BACKEND_URL, {
@@ -369,6 +382,7 @@
 
                 const rawData = await response.json();
                 addLog('Berhasil mem-parsing respons JSON dari backend.', 'success');
+                // Backend Anda sepertinya mengirim JSON sebagai string, jadi kita parse lagi.
                 const data = JSON.parse(rawData);
                 renderResults(data);
 
@@ -409,7 +423,7 @@
                         aspectSentiment.className = 'px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-200 rounded-full';
                     }
                     li.appendChild(aspectName);
-                    li.appendChild(aspectSentiment);
+li.appendChild(aspectSentiment);
                     aspectsList.appendChild(li);
                 });
             } else {
@@ -424,7 +438,11 @@
         }
 
         function resetUI() {
+            // Sembunyikan hasil dan peta saat pencarian baru dimulai
             resultsDiv.classList.add('hidden');
+            mapAndListContainer.classList.add('hidden');
+            
+            // Reset loader dan konten hasil
             analysisLoader.classList.add('hidden');
             errorDiv.classList.add('hidden');
             resultsContent.classList.add('hidden');
@@ -433,7 +451,7 @@
     </script>
 
     <!-- PENTING: Muat Google Maps JavaScript API SETELAH script kita didefinisikan -->
-    <!-- PERBAIKAN: API Key Anda sudah dimasukkan di sini. -->
+    <!-- PERBAIKAN: Ganti URL untuk memuat API dengan benar dan menggunakan callback -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAJCwaPENYvnmqoJ_d8N3u0DvAMXJMzbqo&libraries=places,geometry&callback=initApp" async defer></script>
 
 </body>
